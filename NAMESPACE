@@ -1,0 +1,7 @@
+exportPattern("^[[:alpha:]]+")
+import(data.table)
+import(dplyr)
+import(rinat)
+import(mgcv)
+import(stringr)
+import(ggplot2)
