@@ -11,9 +11,10 @@
 #'   \item{yearly_counts}{A list indicating the number of occurrences for each year represented.}
 #' @export
 #' @import data.table
+#' @import stringr word
 phenology <- function(data) {
   data <- as.data.table(data)
-  scientific_names <- unique(data$scientific_name)
+  scientific_names <- unique(word(data$scientific_name, 1, 2, " "))
   if (length(scientific_names) != 1) {
     stop("Multiple scientific names found. Please provide data for a single species.")
   }

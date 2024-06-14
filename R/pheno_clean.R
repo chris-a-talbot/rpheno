@@ -17,16 +17,24 @@
 #' }
 pheno_clean <- function(phenology) {
   # Ensure input is a phenology object
-  if(class(phenology) != "phenology") {
+  if (class(phenology) != "phenology") {
     stop("Input must be a phenology object.")
   }
 
   data <- phenology$occurrences
 
-  if(nrow(data) >= 75) {
+  # Handle cases where the data frame is empty or has missing values
+  if (nrow(data) == 0 || all(is.na(data$day_of_year)) || all(is.na(data$latitude))) {
+    stop("Phenology data contains no valid occurrences or essential columns are NA.")
+  }
+
+  # Remove rows with NA values in essential columns
+  data <- data %>% filter(!is.na(day_of_year) & !is.na(latitude))
+
+  if (nrow(data) >= 75) {
     # Calculate the 5th and 95th percentiles
-    P025 <- quantile(data$day_of_year, 0.025)
-    P975 <- quantile(data$day_of_year, 0.975)
+    P025 <- quantile(data$day_of_year, 0.025, na.rm = TRUE)
+    P975 <- quantile(data$day_of_year, 0.975, na.rm = TRUE)
 
     # Remove the top and bottom 5% outliers
     data_clean <- data %>%
@@ -35,25 +43,34 @@ pheno_clean <- function(phenology) {
     data_clean <- data
   }
 
-  # Fit a GAM model
-  model <- gam(day_of_year ~ s(latitude), data = data_clean)
+  # Fit a GAM model, only if there are enough data points
+  if (nrow(data_clean) > 10) {
+    model <- gam(day_of_year ~ s(latitude), data = data_clean)
 
-  # Calculate residuals from the model
-  data_clean$residuals <- residuals(model)
+    # Calculate residuals from the model
+    data_clean$residuals <- residuals(model)
 
-  # Define a threshold for outliers (e.g., residuals greater than 2 standard deviations)
-  threshold <- 1.5 * sd(data_clean$residuals)
+    # Define a threshold for outliers (e.g., residuals greater than 2 standard deviations)
+    threshold <- 1.5 * sd(data_clean$residuals, na.rm = TRUE)
 
-  # Remove outliers based on residuals
-  data_final <- data_clean %>%
-    filter(abs(residuals) <= threshold)
+    # Remove outliers based on residuals
+    data_final <- data_clean %>%
+      filter(abs(residuals) <= threshold)
+  } else {
+    data_final <- data_clean
+  }
 
   # Remove occurrences with day_of_year outliers within species groups
   data_final <- data_final %>%
     filter(if (n() > 20) {
-      second_min <- sort(unique(day_of_year))[2]
-      second_max <- sort(unique(day_of_year), decreasing = TRUE)[2]
-      day_of_year >= (second_min - 7) & day_of_year <= (second_max + 7)
+      sorted_days <- sort(unique(day_of_year))
+      if (length(sorted_days) > 2) {
+        second_min <- sorted_days[2]
+        second_max <- sorted_days[length(sorted_days) - 1]
+        day_of_year >= (second_min - 7) & day_of_year <= (second_max + 7)
+      } else {
+        TRUE
+      }
     } else {
       TRUE
     }) %>%
